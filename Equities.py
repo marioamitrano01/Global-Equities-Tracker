@@ -8,6 +8,31 @@ import time
 from ta.trend import SMAIndicator, EMAIndicator
 from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.volatility import BollingerBands
+import importlib
+
+try:
+    st.cache_data
+    USE_NEW_CACHE = True
+except AttributeError:
+    USE_NEW_CACHE = False
+
+def cached_func(ttl=300):
+    if USE_NEW_CACHE:
+        return st.cache_data(ttl=ttl)
+    else:
+        return st.cache(ttl=ttl, allow_output_mutation=True, suppress_st_warning=True)
+
+def clear_cache():
+    if USE_NEW_CACHE:
+        st.cache_data.clear()
+    else:
+        st.cache.clear()
+
+def rerun_app():
+    if USE_NEW_CACHE:
+        st.rerun()
+    else:
+        st.experimental_rerun()
 
 st.set_page_config(
     page_title="Global Equity Tracker",
@@ -54,6 +79,40 @@ indices = {
     "CAC 40": "^FCHI"
 }
 
+def safe_download(ticker, period="1y", start=None, retries=3, delay=1):
+    for i in range(retries):
+        try:
+            import inspect
+            download_params = inspect.signature(yf.download).parameters
+            supports_headers = 'headers' in download_params
+            
+            if start:
+                if supports_headers:
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    }
+                    data = yf.download(ticker, start=start, progress=False, headers=headers)
+                else:
+                    data = yf.download(ticker, start=start, progress=False)
+            else:
+                if supports_headers:
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    }
+                    data = yf.download(ticker, period=period, progress=False, headers=headers)
+                else:
+                    data = yf.download(ticker, period=period, progress=False)
+                
+            if not data.empty:
+                return data
+            
+            time.sleep(delay) 
+        except Exception as e:
+            print(f"Attempt {i+1} failed for {ticker}: {e}")
+            time.sleep(delay)
+    
+    print(f"All attempts failed for {ticker}, returning empty DataFrame")
+    return pd.DataFrame(columns=['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume'])
 def ensure_1d(series):
     if hasattr(series, 'iloc') and hasattr(series.iloc[0], 'iloc'):
         return series.iloc[:, 0]
@@ -139,7 +198,7 @@ def create_correlation_matrix(start_date=None):
     
     for name, ticker in indices.items():
         try:
-            df = yf.download(ticker, start=start_date, progress=False)
+            df = safe_download(ticker, start=start_date)
             if not df.empty:
                 close_values = ensure_1d(df['Close'])
                 returns = np.log(close_values / close_values.shift(1))
@@ -170,13 +229,13 @@ def display_correlation_matrix(corr_matrix):
     
     return fig
 
-@st.cache(ttl=300, allow_output_mutation=True, suppress_st_warning=True)
+@cached_func(ttl=300)
 def fetch_index_data(ticker, period="1y", start=None):
     try:
         if start:
-            df = yf.download(ticker, start=start, progress=False)
+            df = safe_download(ticker, start=start)
         else:
-            df = yf.download(ticker, period=period, progress=False)
+            df = safe_download(ticker, period=period)
         
         if df.empty:
             return None
@@ -527,8 +586,8 @@ def main():
     col1, col2 = st.columns([1, 3])
     with col1:
         if st.button("Refresh Data"):
-            st.cache.clear()
-            st.experimental_rerun()
+            clear_cache()
+            rerun_app()
     with col2:
         st.write(f"Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -733,8 +792,8 @@ def handle_auto_refresh():
         time.sleep(1)
         count -= 1
         if count == 0:
-            st.cache.clear()
-            st.experimental_rerun()
+            clear_cache()
+            rerun_app()
 
 if __name__ == "__main__":
     main()
