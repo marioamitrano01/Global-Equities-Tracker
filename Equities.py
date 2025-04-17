@@ -39,7 +39,6 @@ def rerun_app():
     else:
         st.experimental_rerun()
 
-# Custom styling
 st.markdown("""
 <style>
  .main {
@@ -64,11 +63,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# App title and description
 st.title("Global Stock Indices Tracker")
 st.markdown("Real-time monitoring of major global stock indices with technical indicators for asset managers.")
 
-# Define stock indices
 indices = {
     "S&P 500": "^GSPC",
     "NASDAQ": "^IXIC",
